@@ -2,13 +2,14 @@
 set_time_limit(0);
 header('Content-type:text/html;charset=utf-8');
 
-$date = U::getValue($_GET,'date','2016-02-03'); 	// 购票日期
-$from = U::getValue($_GET,'form','北京'); 		// 起点
-$to   = U::getValue($_GET,'to','襄阳'); 		// 终点
+$date = U::getValue($_GET,'date','2016-09-06'); 	// 购票日期
+$from = U::getValue($_GET,'form','襄阳'); 		// 起点
+$to   = U::getValue($_GET,'to','北京'); 		// 终点
 $min  = 1;				// 最小余票量。如：余票量大于 1 就提醒我，否者忽略
 
 $url = C::getListsUrl($date, Z::getName($from), Z::getName($to));
 $result = U::curlRequest($url); // 获取列车表
+
 
 if( ($data = U::getDataByJson($result)) === false ){
 	U::end('获取列车失败');
@@ -74,6 +75,7 @@ class M{
 	public static function checkingLieche(){
 		foreach(self::$stationNewArr as $v){
 			$url = C::getListsUrl($GLOBALS['date'], Z::getName($v['start']), Z::getName($v['end']));
+            
 			$result = U::curlRequest($url); // 获取列车表
 			if( ($data = U::getDataByJson($result)) ){
 				self::checkIsBuyByThis($data);
@@ -101,7 +103,7 @@ class M{
 
 			}
 		}
-
+        
 		// 按照跨站的距离排序
 		self::$stationNewArr = U::array_sort(self::$stationNewArr,'order','asc');
 	}
@@ -186,6 +188,7 @@ class M{
 			// 送入笛卡尔算法
 			self::$stationArr[] = U::combineDika($beforeSizesArr,$backSizesArr); # 计算笛卡尔积
 		}
+       
 	}
 
 
@@ -193,9 +196,10 @@ class M{
 	public static function foreachTrain($data){
 		// 遍历当前行程的车次
 		foreach ($data as $val) {
-			$row = U::getValue($val,'queryLeftNewDTO');
+			//$row = U::getValue($val,'queryLeftNewDTO');
+			$row = $val;
 
-			$train_no = U::getValue($row,'train_no',0); // 列车编号
+			$train_no = U::getValue($val,'train_no',0); // 列车编号
 
 			$start_station_telecode = U::getValue($row,'start_station_telecode'); // 列车起点站代号
 			$start_station_name = U::getValue($row,'start_station_name'); // 列车起点站名称
@@ -204,12 +208,18 @@ class M{
 
 			$from_station_telecode = U::getValue($row,'from_station_telecode'); // 行程起点代号
 			$from_station_name = U::getValue($row,'from_station_name'); // 行程起点名称
+            
 			$to_station_telecode = U::getValue($row,'to_station_telecode'); // 行程终点代号
 			$to_station_name = U::getValue($row,'to_station_name'); // 行程终点名称
+            
+			$seat_types = U::getValue($row,'seat_types'); // 
 			
-			$url = C::getStationUrl($train_no,$GLOBALS['date'],$from_station_telecode,$to_station_telecode);
-			$result = U::curlRequest($url);
-			if( $data = U::getDataByJson($result)){
+			$url = C::getStationUrl($train_no,$GLOBALS['date'],$from_station_telecode,$to_station_telecode,$seat_types);
+			
+            $result = U::curlRequest($url);
+            
+     
+			if( $data = U::getDataByJson2($result)){
 				$tmpArr = U::getValue($data,'data',array());
 				if(!empty($tmpArr)){
 					M::$trainArr[] = $tmpArr;
@@ -225,7 +235,8 @@ class M{
 	 */
 	public static function saveAs($data = array()){
 		foreach ($data as $val) {
-			$row = U::getValue($val,'queryLeftNewDTO');
+			//$row = U::getValue($val,'queryLeftNewDTO');
+			$row = $val;
 			self::$As[U::getValue($row,'station_train_code')] = array(
 				'station_train_code' => U::getValue($row,'station_train_code'),
 				'train_no' => U::getValue($row,'train_no'),
@@ -239,7 +250,8 @@ class M{
 	 */
 	public static function checkIsBuy($data = array()){
 		foreach ($data as $val) {
-			$row = U::getValue($val,'queryLeftNewDTO');
+			//$row = U::getValue($val,'queryLeftNewDTO');
+			$row = $val;
 
 			$yz_num = M::rNumber(U::getValue($row,'yz_num',0)); // 硬座
 			$yw_num = M::rNumber(U::getValue($row,'yw_num',0)); // 硬卧
@@ -258,7 +270,9 @@ class M{
 	 */
 	public static function checkIsBuyByThis($data = array()){
 		foreach ($data as $val) {
-			$row = U::getValue($val,'queryLeftNewDTO');
+			//$row = U::getValue($val,'queryLeftNewDTO');
+			$row = $val;
+            
 			$station_train_code = U::getValue($row,'station_train_code','');
 			if(isset(self::$As[$station_train_code])){
 				$yz_num = M::rNumber(U::getValue($row,'yz_num',0)); // 硬座
@@ -284,14 +298,16 @@ class C{
 	 * 获取列车列表URL
 	 */
 	public static function getListsUrl($date = '',$from = '',$to = ''){
-		return "https://kyfw.12306.cn/otn/leftTicket/queryT?leftTicketDTO.train_date={$date}&leftTicketDTO.from_station={$from}&leftTicketDTO.to_station={$to}&purpose_codes=ADULT";
+		return "https://kyfw.12306.cn/otn/lcxxcx/query?purpose_codes=ADULT&queryDate={$date}&from_station={$from}&to_station={$to}";
+		//return "https://kyfw.12306.cn/otn/leftTicket/queryT?leftTicketDTO.train_date={$date}&leftTicketDTO.from_station={$from}&leftTicketDTO.to_station={$to}&purpose_codes=ADULT";
 	}
 
 	/**
 	 * 获取列车站点URL
 	 */
-	public static function getStationUrl($train_no = '',$date = '',$from = '',$to = ''){
+	public static function getStationUrl($train_no = '',$date = '',$from = '',$to = '', $seat_types = ''){
 		return "https://kyfw.12306.cn/otn/czxx/queryByTrainNo?train_no={$train_no}&from_station_telecode={$from}&to_station_telecode={$to}&depart_date={$date}";
+		//return "https://kyfw.12306.cn/otn/czxx/queryByTrainNo?train_no={$train_no}&from_station_telecode={$from}&to_station_telecode={$to}&depart_date={$date}";
 	}
 
 
@@ -304,6 +320,18 @@ class U{
 
 	// 检查
 	public static function getDataByJson($result){
+		if(self::isJson($result)){
+			$json = json_decode($result);
+			if( (self::getValue($json,'status') === true) && (self::getValue($json,'httpstatus') === 200) ){
+				$data = self::getValue($json,'data',array());
+				return self::getValue($data,'datas',array());
+			}
+		}
+
+		return false;	
+	}
+    
+    public static function getDataByJson2($result){
 		if(self::isJson($result)){
 			$json = json_decode($result);
 			if( (self::getValue($json,'status') === true) && (self::getValue($json,'httpstatus') === 200) ){
@@ -533,7 +561,7 @@ class Z{
 
 	<div class="wrap">
 		<header>
-			<div class="title"><h1>火车票检漏脚本 - By v1.0</h1></div>
+			<div class="title"><h1>火车票检漏脚本 - By v1.1</h1></div>
 		</header>
 		<content>
 
@@ -583,7 +611,7 @@ class Z{
 		</content>
 
 		<footer>
-			<p><strong>©</strong><a href="http://www.56br.com/" target="_blank">Wanglele</a><span>版权所有</span></p>
+			<p><strong>©</strong><a href="https://www.56br.com/" target="_blank">Wanglele</a><span>版权所有</span></p>
 		</footer>
 	</div>
 
@@ -617,3 +645,4 @@ class Z{
 
 </body>
 </html>
+
